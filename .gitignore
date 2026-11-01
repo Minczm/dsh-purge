@@ -33,3 +33,8 @@ default-prompt-inject.md
 *.asar
 *.asar.bak
 *.bak
+
+# local: 页签改造脚本的自动备份
+client.js.bak-patch-*
+*.bak-*
+.fix-backup-*

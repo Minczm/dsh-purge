@@ -136,6 +136,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"dock.full": "全面浏览",
 			"dock.close": "收起",
 			"dock.unauthorized": "未授权",
+			"view.grant": "去授权",
 			"welcome.title": "用户须知",
 			"welcome.lead": "首次安装本插件时请阅读以下说明。确认后本窗不再弹出。",
 			"welcome.warn": "本插件免费开源。任何背着作者私自售卖、付费倒卖或借本项目盈利的行为，作者将依法追究法律责任。",
@@ -497,6 +498,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"dock.full": "Full view",
 			"dock.close": "Collapse",
 			"dock.unauthorized": "Unauthorized",
+			"view.grant": "Grant access",
 			"welcome.title": "User notice",
 			"welcome.lead": "Please read this on first install. After you confirm, it will not appear again.",
 			"welcome.warn": "This plugin is free and open source. Anyone who sells, resells, or profits from it behind the author's back may face legal action.",
@@ -1036,7 +1038,7 @@ body[data-ds-dark-theme] .dshp-restart-card .dshp-btn-primary,body[data-ds-dark-
 .dshp-dock-body .rt-dock{position:relative;inset:auto;width:100%!important;height:100%;max-width:none!important;flex:1;min-height:0;min-width:0;display:flex!important;flex-direction:column;box-shadow:none;border:0;transform:none!important;opacity:1!important;pointer-events:auto!important;background:transparent!important}
 .dshp-dock-body .rt-grip{display:none!important}
 .dshp-dock-body .rt-embedded>.rt-head,.dshp-dock-body .rt-tabs,.dshp-dock-body .rt-foot{flex:none}
-.dshp-dock-body .rt-body{flex:1;min-height:0;overflow:hidden!important;background:transparent!important}
+.dshp-dock-body .rt-embedded>.rt-body{flex:1;min-height:0;overflow:hidden!important;background:transparent!important}
 .dshp-dock-body .rt-main{min-height:0;flex:1;overflow:hidden}
 .dshp-dock-body .rt-pane{min-height:0;overflow:auto!important}
 .dshp-dock-body .rt-embedded>.rt-head{padding:8px 12px}
@@ -8034,7 +8036,7 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 					if (drillGrantPosting > 0) return;
 					setDrillAuthLocal(false);
 					if (dockBus.authOpen || dockBus.tab === "drill") {
-						setDock({ open: true, tab: "drill", authOpen: true, pending: dockBus.pending || "tab" });
+						setDock({ open: false, tab: "drill", authOpen: true, pending: dockBus.pending || "tab" });
 					}
 				})
 				.catch(() => {
@@ -8064,26 +8066,18 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 			return st;
 		}
 
+		/* 浮层已下线：所有入口统一跳顶部页签（清洗 / 演练台）。
+		   未授权时只拉起授权窗，授权确认后由 AuthGate 负责切到演练台。 */
 		function requestDrill(kind) {
 			const pending = kind || "tab";
-			const openEnv = () => {
-				try {
-					if (__dshPurgeDrill && __dshPurgeDrill.setUI) {
-						__dshPurgeDrill.setUI({ open: true, tab: "env" });
-					}
-				} catch { /* ignore */ }
-			};
-			if (readDrillAuth()) {
-				setDock({ open: true, tab: "drill", authOpen: false, pending: "tab" });
-				try { if (__dshPurgeDrill && __dshPurgeDrill.setUI) __dshPurgeDrill.setUI({ open: true }); } catch { /* ignore */ }
-				if (pending === "env") openEnv();
-				if (pending === "full") {
-					try { window.open(window.location.href.split("#")[0] + "#redteam-full", "_blank", "noopener"); } catch { /* ignore */ }
-				}
-				return;
+			const authorized = readDrillAuth();
+			setDock({ open: false, tab: "drill", authOpen: !authorized, pending: pending });
+			showPurgeTab("drill");
+			if (!authorized) return;
+			try { if (__dshPurgeDrill && __dshPurgeDrill.setUI) __dshPurgeDrill.setUI({ open: true }); } catch { /* ignore */ }
+			if (pending === "env") {
+				try { if (__dshPurgeDrill && __dshPurgeDrill.setUI) __dshPurgeDrill.setUI({ open: true, tab: "env" }); } catch { /* ignore */ }
 			}
-			/* 未授权：直接切到演练台页签并弹出授权窗（不再停在清洗页，避免像「没触发」） */
-			setDock({ open: true, tab: "drill", authOpen: true, pending: pending });
 		}
 
 		function requestDrillEnv() {
@@ -8091,11 +8085,39 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 		}
 
 		function openDockClean() {
-			setDock({ open: true, tab: "clean", authOpen: false, pending: "tab" });
+			setDock({ open: false, tab: "clean", authOpen: false, pending: "tab" });
+			showPurgeTab("clean");
 		}
 		function toggleDock() {
-			if (dockBus.open) setDock({ open: false, authOpen: false, pending: "tab" });
-			else openDockClean();
+			showPurgeTab("clean");
+		}
+
+		/* 页签取代浮层后的统一跳转：
+		   openView 由宿主作为 props 传给 conversation.view 组件，挂载时捕获；
+		   还没捕获到（当前停在「对话」页、我们的 view 从没挂过）就退回点 DOM 里的页签按钮。 */
+		let purgeOpenView = null;
+		function purgeTabLabel(which) {
+			return translate(which === "clean" ? "dock.clean" : "dock.drill");
+		}
+		function showPurgeTab(which) {
+			const want = which === "drill" ? "drill" : "clean";
+			const id = want === "clean" ? "dsh-purge-clean" : "dsh-purge-drill";
+			/* 先点 DOM 里的页签：那永远是当前会话的 tab，不会因为捕获到旧 openView 切错会话 */
+			try {
+				const label = purgeTabLabel(want);
+				const tabs = Array.prototype.slice.call(
+					document.querySelectorAll('[data-conversation-tabs] [role="tab"]'),
+				);
+				const hit = tabs.find((el) => String(el.textContent || "").trim() === label);
+				if (hit) { hit.click(); return true; }
+			} catch { /* 落到 openView 兜底 */ }
+			if (typeof purgeOpenView === "function") {
+				try { purgeOpenView(id, ""); return true; } catch { /* ignore */ }
+			}
+			return false;
+		}
+		function purgeOpenViewPatch(fn) {
+			if (typeof fn === "function") purgeOpenView = fn;
 		}
 		syncDrillGrant();
 
@@ -8263,13 +8285,11 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 								if (!ready) return;
 								writeDrillAuth(true);
 								const kind = props.pending || "tab";
-								setDock({ authOpen: false, open: true, tab: "drill", pending: "tab" });
+								setDock({ authOpen: false, open: false, tab: "drill", pending: "tab" });
+								showPurgeTab("drill");
 								try { if (__dshPurgeDrill && __dshPurgeDrill.setUI) __dshPurgeDrill.setUI({ open: true }); } catch { /* ignore */ }
 								if (kind === "env") {
 									try { if (__dshPurgeDrill && __dshPurgeDrill.setUI) __dshPurgeDrill.setUI({ open: true, tab: "env" }); } catch { /* ignore */ }
-								}
-								if (kind === "full") {
-									try { window.open(window.location.href.split("#")[0] + "#redteam-full", "_blank", "noopener"); } catch { /* ignore */ }
 								}
 							},
 						}, okLabel),
@@ -8626,6 +8646,87 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 			);
 		}
 
+		/* 会话区顶层页签（宿主 conversation.view 槽位，内置「对话」页也是这么挂的）。
+		   高度由宿主的 viewArea 给，这里只负责撑满 + 让内部各自滚动。
+		   注意：不要在这里写 overflow:hidden!important —— 会把报告页的内联 overflow:auto 一起压掉。 */
+		const VIEW_CSS = `
+.dshp-view{display:flex;flex-direction:column;flex:1;min-height:0;height:100%;overflow:hidden;background:var(--dsw-alias-bg-base,transparent);color:var(--dsw-alias-label-primary)}
+.dshp-view .dshp-root{flex:1;min-height:0;max-width:none;height:100%;overflow:auto;background:transparent!important}
+.dshp-view .rt-dock.rt-embedded{flex:1;min-height:0;width:100%;height:100%}
+.dshp-view .rt-head,.dshp-view .rt-tabs,.dshp-view .rt-foot{flex:none}
+.dshp-view .rt-body{flex:1;min-height:0}
+.dshp-view .rt-main{flex:1;min-height:0;overflow:hidden}
+/* 底部输入框属于「对话」页，而且在宿主里是绝对定位的浮层：本页签激活时收掉，否则会盖住表格最后几行。
+   但审批 / 提问 / 计划确认这几类卡片也挂在 composer 上，出现时必须放回来（下面两条规则选择器更具体，会覆盖收起）。 */
+[data-conversation-region="chat"]:has(.dshp-view) [data-conversation-region="composer"]{display:none!important}
+[data-conversation-region="chat"]:has(.dshp-view) [data-conversation-region="composer"]:has([data-approval-key]),
+[data-conversation-region="chat"]:has(.dshp-view) [data-conversation-region="composer"]:has([data-question-key]),
+[data-conversation-region="chat"]:has(.dshp-view) [data-conversation-region="composer"]:has([data-plan-review-key]){display:flex!important}
+.dshp-view-note{padding:18px 20px;font-size:13px;line-height:1.8;color:var(--dsw-alias-label-secondary)}
+.dshp-view-note b{display:block;margin-bottom:6px;font-size:14px;color:var(--dsw-alias-label-primary)}
+.dshp-view-note .dshp-view-ops{margin-top:14px}
+`;
+
+		/* 浮层下线后，样式和授权弹窗还需要一个常驻宿主：样式注入一次，
+		   授权弹窗只看 authOpen（它自己 portal 到 body，不占布局）。 */
+		function PurgeStyleHost() {
+			useEffect(() => {
+				if (typeof document === "undefined") return undefined;
+				const ensure = (attr, css) => {
+					if (!css) return;
+					if (document.querySelector("style[" + attr + "]")) return;
+					const tag = document.createElement("style");
+					tag.setAttribute(attr, "1");
+					tag.textContent = css;
+					document.head.append(tag);
+				};
+				ensure("data-dsh-purge-ui", PURGE_CSS);
+				if (__dshPurgeDrill && __dshPurgeDrill.CSS) ensure("data-dsh-purge-drill", __dshPurgeDrill.CSS);
+				return undefined;
+			}, []);
+			return null;
+		}
+
+		function PurgeGateHost() {
+			useDock();
+			return dockBus.authOpen ? h(AuthGate, { pending: dockBus.pending }) : null;
+		}
+
+		function PurgeCleanView(props) {
+			const t = useT();
+			/* 捕获宿主给的 openView：其它入口（首页 chip / 输入框按钮）靠它切页签 */
+			useEffect(() => { purgeOpenViewPatch(props && props.openView); }, [props && props.openView]);
+			return h("div", { className: "dshp-view", "data-dshp-view": "clean" },
+				h("style", null, VIEW_CSS),
+				h(SettingsRoot, { t }),
+			);
+		}
+
+		function PurgeDrillView(props) {
+			const t = useT();
+			useEffect(() => { purgeOpenViewPatch(props && props.openView); }, [props && props.openView]);
+			/* 订阅 dockBus：授权确认时会 setDrillAuthLocal(true) + setDock(...)，
+			   订阅到就能切回演练台，不用自己轮询。 */
+			useDock();
+			const ready = Boolean(readDrillAuth() && __dshPurgeDrill && __dshPurgeDrill.Panel);
+			return h("div", { className: "dshp-view", "data-dshp-view": "drill" },
+				h("style", null, VIEW_CSS),
+				ready
+					? h(__dshPurgeDrill.Panel, { embedded: true })
+					: h("div", { className: "dshp-view-note" },
+						h("b", null, t("dock.drill")),
+						h("div", null, t("dock.unauthorized")),
+						h("div", { className: "dshp-view-ops" },
+							h("button", {
+								type: "button",
+								className: "dshp-btn dshp-btn-primary",
+								onClick: () => setDock({ open: false, tab: "drill", authOpen: true, pending: "tab" }),
+							}, t("view.grant")),
+						),
+					),
+			);
+		}
+
 		function PurgeDock() {
 			const t = useT();
 			const st = useDock();
@@ -8756,11 +8857,14 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 				window.addEventListener("mousemove", move);
 				window.addEventListener("mouseup", up);
 			};
+			/* 演练台浮层只在这一层可见时挂载：页签里已经有一份，收起后再挂一份就是双份轮询。 */
 			const body = st.tab === "clean"
 				? h(SettingsRoot, { t })
-				: (readDrillAuth() && __dshPurgeDrill.Panel
-					? h(__dshPurgeDrill.Panel, { embedded: true })
-					: h("div", { style: { padding: 16, color: "var(--dsw-alias-label-secondary)" } }, t("dock.unauthorized")));
+				: !st.open
+					? null
+					: (readDrillAuth() && __dshPurgeDrill.Panel
+						? h(__dshPurgeDrill.Panel, { embedded: true })
+						: h("div", { style: { padding: 16, color: "var(--dsw-alias-label-secondary)" } }, t("dock.unauthorized")));
 			const panel = h("div", {
 				className: "dshp-dock",
 				"data-theme": dockTheme === "white" ? "white" : "dusk",
@@ -9112,7 +9216,21 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 				name: "shell.overlay",
 				id: "dsh-purge-dock",
 				order: 50,
-			}, () => h(react.Fragment, null, h(WelcomeNotice), h(PurgeLauncher), h(PurgeDock), h(HeroNewSessionMount), h(TabRowPurgeMount), h(EnvAdaptSendGate))));
+			}, () => h(react.Fragment, null, h(PurgeStyleHost), h(WelcomeNotice), h(PurgeGateHost), h(HeroNewSessionMount), h(TabRowPurgeMount), h(EnvAdaptSendGate))));
+			/* 顶层页签：清洗 / 演练台 挂到宿主的 conversation.view 槽位（内置「对话」页用的是同一个）。
+			   老宿主没有这个槽位时 inject 不会触发；浮层入口已下线，此时只能靠首页 chip / 输入框按钮提示。 */
+			try {
+				const registerView = (id, order, label, component) => {
+					ctx.slots.inject("conversation.view", () => ctx.slots.register({
+						name: "conversation.view",
+						id,
+						order,
+						label,
+					}, component));
+				};
+				registerView("dsh-purge-clean", 20, () => t("dock.clean"), PurgeCleanView);
+				registerView("dsh-purge-drill", 21, () => t("dock.drill"), PurgeDrillView);
+			} catch { /* 槽位不可用：保持原有浮层 */ }
 			try {
 				if (typeof ctx.inject === "function") {
 					ctx.inject(["sessions", "uiWorkspace", "workspaces", "conversation"], (host) => installRewindUi(host));
