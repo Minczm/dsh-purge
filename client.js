@@ -9216,7 +9216,7 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 				name: "shell.overlay",
 				id: "dsh-purge-dock",
 				order: 50,
-			}, () => h(react.Fragment, null, h(PurgeStyleHost), h(WelcomeNotice), h(PurgeGateHost), h(HeroNewSessionMount), h(TabRowPurgeMount), h(EnvAdaptSendGate))));
+			}, () => h(react.Fragment, null, h(PurgeStyleHost), h(WelcomeNotice), h(PurgeGateHost), h(HeroNewSessionMount), h(EnvAdaptSendGate) /* [local] 顶部页签的 dsh-purge 入口已去掉（浮层早已下线，点了没作用） */)));
 			/* 顶层页签：清洗 / 演练台 挂到宿主的 conversation.view 槽位（内置「对话」页用的是同一个）。
 			   老宿主没有这个槽位时 inject 不会触发；浮层入口已下线，此时只能靠首页 chip / 输入框按钮提示。 */
 			try {

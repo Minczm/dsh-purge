@@ -373,6 +373,17 @@ patch('client.js', [[
   '面板提示（英）改成「已解除」',
 ]])
 
+/* ── 9. 去掉顶部页签行里的 dsh-purge 入口 ────────────────────────────────── */
+/* TabRowPurgeMount 会往宿主对话页签行尾部塞一个「dsh-purge」按钮，点它只调
+   toggleDock()，而浮层 PurgeDock 早已下线（全仓没有 h(PurgeDock) 挂载，所有
+   setDock 都是 open:false）——按钮是死的，功能与顶部「清洗 / 演练台」两个页签重复。
+   这里把它的挂载去掉，入口只留首页 chip（HeroNewSessionMount）。 */
+patch('client.js', [[
+  `h(PurgeGateHost), h(HeroNewSessionMount), h(TabRowPurgeMount), h(EnvAdaptSendGate)`,
+  `h(PurgeGateHost), h(HeroNewSessionMount), h(EnvAdaptSendGate) /* [local] 顶部页签的 dsh-purge 入口已去掉（浮层早已下线，点了没作用） */`,
+  '去掉页签行里的 dsh-purge 死按钮',
+]])
+
 /* ── 依赖文件存在性检查：新增模块不进补丁表，必须随仓库一起带 ─────────────── */
 for (const f of ['lib/redteam/agent-activity.js']) {
   if (!existsSync(join(root, f))) steps.push('FAIL  ' + f + ' :: 缺失（该文件应由仓库自带，不靠补丁生成）')

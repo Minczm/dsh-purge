@@ -36,6 +36,7 @@ fe9c8a6  upstream: v1.1.86 baseline (LF preserved via .gitattributes)
 | 并发数字 5 秒轮询 | `lib/redteam/client.js` | 上游只在挂载时取一次快照，看起来永远 0 |
 | 顶层页签（清洗 / 演练台） | `client.js` + `scripts/patch-conversation-view.mjs` | 上游仍是右侧浮层 dock；改成宿主 `conversation.view` 槽位，含 composer 遮挡处理 |
 | 解除「本地靶场」目标限制 | `lib/net-scope.js` + `client.js` | 上游 `installRegionGate` 把攻击任务锁死在本机/内网：域名先解析、任一地址是公网就拦，攻击任务不点名目标也拦（unspecified 分支）。本机要打公网靶标，改成恒放行；旧判定保留为 `isRangeTargetLocalLab`，面板文案同步改成「已解除」 |
+| 去掉页签行里的 `dsh-purge` 死按钮 | `client.js`（apply-local 第 9 节） | `TabRowPurgeMount` 往宿主对话页签行尾部塞的按钮只调 `toggleDock()`，而浮层 `PurgeDock` 已无挂载点（全仓没有 `h(PurgeDock)`，`setDock` 一律 `open:false`），点了没反应，功能与顶部「清洗 / 演练台」两个页签完全重复 |
 
 一处例外：#6「scope-aware var guard」（把宿主 `unknown prompt variable` 抛错改成跳过）**没有**移植——1.1.86 已用 `cwdSupported` 静态回退从源头消掉触发条件，暂时不需要。
 
