@@ -305,6 +305,74 @@ function pointPackageJsonAt(repo) {
 
 pointPackageJsonAt(forkRepo)
 
+/* ── 8. 解除「本地靶场」限制：攻击任务不再按目标位置（回环/RFC1918）拦截 ──── */
+/* 上游 lib/net-scope.js 的 installRegionGate 挂两个钩子：
+     · agent/pre-step     —— 扫本轮新用户句，出现的每个域名先做系统解析（含 hosts），
+                            任一 A/AAAA 不是私网/回环就整条拦；攻击任务不点名目标也拦
+                            （taskTargetHit 的 unspecified 分支）。
+     · tools/pre-execute  —— 再扫一遍工具参数，公网目标一律拒。
+   这里把 isRangeTarget 收成恒真（DNS 完全不参与判定），并去掉 unspecified 分支；
+   旧判定改名 isRangeTargetLocalLab 原样保留，要恢复只需让它重新被调用。
+   客户端 own.hint / own.title 同步改成「已解除」，否则面板文案与行为不符。 */
+patch('lib/net-scope.js', [[
+  `async function isRangeTarget(name) {
+  if (!name) return false;
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  if (isIp(name)) return isLocalLabAddress(name);
+  const ips = await lookupIps(name);
+  if (!ips.length) return false;
+  return ips.every((ip) => isLocalLabAddress(ip));
+}`,
+  `async function isRangeTarget() {
+  return true; // [local] 目标范围限制已解除
+}
+
+/** 旧判定保留：把 isRangeTarget 改回调用它即可恢复本地靶场限制。 */
+async function isRangeTargetLocalLab(name) {
+  if (!name) return false;
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  if (isIp(name)) return isLocalLabAddress(name);
+  const ips = await lookupIps(name);
+  if (!ips.length) return false;
+  return ips.every((ip) => isLocalLabAddress(ip));
+}`,
+  'isRangeTarget 恒真（旧判定保留为 isRangeTargetLocalLab）',
+], [
+  `export async function taskTargetHit(text) {
+  if (!isAttackTask(text)) return null;
+  let found = false;
+  for (const host of hostsInTask(text)) {
+    if (hostOf(host)) found = true;
+  }
+  if (!found) return taskHit("unspecified", "domain");
+  return publicHostHit(text);
+}`,
+  `export async function taskTargetHit(text) {
+  // [local] 目标范围限制已解除：攻击任务不必点名目标，目标也不再按位置判定。
+  if (!isAttackTask(text)) return null;
+  return publicHostHit(text);
+}`,
+  'taskTargetHit 去掉 unspecified 拦截',
+]])
+
+patch('client.js', [[
+  `"own.title": "本地靶场"`,
+  `"own.title": "目标名单"`,
+  '面板标题（中）改成「目标名单」',
+], [
+  `"own.hint": "开源版攻击任务只放行本机/内网 IP。域名会先解析，解析到的每一个地址都必须是私网或回环；hosts 把 .lab 指到公网 IP 也会拦。解析失败或混有公网地址一律拦截。"`,
+  `"own.hint": "本机已解除目标范围限制：攻击任务填公网域名或 IP 直接放行，不再做域名解析与私网/RFC1918 判定，hosts 指向公网也不再拦。下面的名单已不参与放行判定。"`,
+  '面板提示（中）改成「已解除」',
+], [
+  `"own.title": "Local lab only"`,
+  `"own.title": "Targets"`,
+  '面板标题（英）改成 Targets',
+], [
+  `"own.hint": "The open-source build only allows localhost/private IPs. Domains are resolved first; every A/AAAA must be loopback or RFC1918. A hosts entry that points .lab at a public IP is blocked. Failed or mixed public answers are denied."`,
+  `"own.hint": "Target scope is unrestricted on this install: public domains and IPs pass straight through, with no DNS resolution and no RFC1918/loopback check. A hosts entry that points at a public IP is no longer blocked. The list below no longer affects gating."`,
+  '面板提示（英）改成「已解除」',
+]])
+
 /* ── 依赖文件存在性检查：新增模块不进补丁表，必须随仓库一起带 ─────────────── */
 for (const f of ['lib/redteam/agent-activity.js']) {
   if (!existsSync(join(root, f))) steps.push('FAIL  ' + f + ' :: 缺失（该文件应由仓库自带，不靠补丁生成）')

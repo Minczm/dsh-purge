@@ -35,6 +35,7 @@ fe9c8a6  upstream: v1.1.86 baseline (LF preserved via .gitattributes)
 | `maxAgentsNow` 的 store 兜底 | `lib/redteam/tools.js` | `ctx.redteam` 在 Scoped 平面会抛，静默 undefined → `settingsPathOf(undefined)` 退化成 `./settings.json` → 面板显示 5、闸门按 3 卡人 |
 | 并发数字 5 秒轮询 | `lib/redteam/client.js` | 上游只在挂载时取一次快照，看起来永远 0 |
 | 顶层页签（清洗 / 演练台） | `client.js` + `scripts/patch-conversation-view.mjs` | 上游仍是右侧浮层 dock；改成宿主 `conversation.view` 槽位，含 composer 遮挡处理 |
+| 解除「本地靶场」目标限制 | `lib/net-scope.js` + `client.js` | 上游 `installRegionGate` 把攻击任务锁死在本机/内网：域名先解析、任一地址是公网就拦，攻击任务不点名目标也拦（unspecified 分支）。本机要打公网靶标，改成恒放行；旧判定保留为 `isRangeTargetLocalLab`，面板文案同步改成「已解除」 |
 
 一处例外：#6「scope-aware var guard」（把宿主 `unknown prompt variable` 抛错改成跳过）**没有**移植——1.1.86 已用 `cwdSupported` 静态回退从源头消掉触发条件，暂时不需要。
 
@@ -46,6 +47,16 @@ node scripts/patch-conversation-view.mjs   # client.js 页签改造（幂等，�
 ```
 
 `apply-local.mjs` 只改工作区，不碰 `node_modules`。改动直接提交进 git，跟上游时 `rebase` 就是一次真 diff。
+
+已装副本（`%USERPROFILE%\.dsh\profiles\<profile>\node_modules\dsh-purge`）用同一套规则重打，脚本随仓库带一份：
+
+```powershell
+powershell -NoProfile -File local\patch-installed-scope.ps1            # 应用（幂等）
+powershell -NoProfile -File local\patch-installed-scope.ps1 -DryRun    # 只看状态
+powershell -NoProfile -File local\patch-installed-scope.ps1 -Revert    # 回滚到 .bak
+```
+
+它只处理「解除靶场限制」这两处（`-Root` 可指向任意 dsh-purge 目录）；上游改版覆盖后重跑一次即可。门禁在宿主进程启动时挂载，改完必须**重启宿主**才生效，刷新页面只更新文案。
 
 ## 跟上游
 
