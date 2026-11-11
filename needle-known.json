@@ -1,0 +1,8 @@
+{
+  "//": "verify-needles.mjs 的已知歧义清单：命中数 >1 但属于设计预期（同一段文案存在于 bash/pwsh 两份工具描述）。只允许登记，不允许静默。",
+  "entries": [
+    { "id": 33, "contains": "a policy denial: do not retry another way", "reason": "tool-bash 与 tool-pwsh 两份描述各一份；两份命中数不同（1 / 2），写死 expect 会让另一个文件整条拒写" },
+    { "id": 33, "contains": "[sandbox: file access denied under <mode> mode]", "reason": "同上：bash / pwsh 各一份，计数不一致" },
+    { "id": 48, "contains": "Before any delete or move, verify that the resolved absolute", "reason": "同上：bash / pwsh 各一份，计数不一致" }
+  ]
+}

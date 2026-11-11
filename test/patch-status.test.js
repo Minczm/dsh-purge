@@ -142,7 +142,9 @@ test("rollupDisplayStatus: 一组里只要有一条漂移，这组就不是干�
 });
 
 /* ---------------------------------------------------------------------------
- * 软成功口径：skipped 不再天然软成功；drifted 看得见但不阻断 Apply。
+ * 软成功口径：skipped 不再天然软成功；drifted 默认**阻断** Apply。
+ * 旧口径（drifted 一律放过）的代价是：上游一改文案，补丁永久漂移、界面标红但照常重启，
+ * 用户看到的绿是"没在动"而不是"打好了"。现在只有可选补丁或显式逃生口能放过。
  * ------------------------------------------------------------------------- */
 
 test("isPatchResultSoftOk: skipped 只有可选/自标记型才算软成功", () => {
@@ -150,8 +152,18 @@ test("isPatchResultSoftOk: skipped 只有可选/自标记型才算软成功", ()
   assert.equal(isPatchResultSoftOk({ status: "skipped" }, { id: 2, optional: true }), true);
 });
 
-test("isPatchResultSoftOk: drifted 不阻断 Apply（兼容 0.1.6 / 0.2.0 / 0.2.1-rc.2）", () => {
-  assert.equal(isPatchResultSoftOk({ status: "drifted" }, { id: 3, optional: false }), true);
+test("isPatchResultSoftOk: drifted 默认阻断 Apply，可选补丁与逃生口除外", () => {
+  const prev = process.env.DSH_PURGE_ALLOW_DRIFT;
+  try {
+    delete process.env.DSH_PURGE_ALLOW_DRIFT;
+    assert.equal(isPatchResultSoftOk({ status: "drifted" }, { id: 3, optional: false }), false);
+    assert.equal(isPatchResultSoftOk({ status: "drifted" }, { id: 4, optional: true }), true);
+    process.env.DSH_PURGE_ALLOW_DRIFT = "1";
+    assert.equal(isPatchResultSoftOk({ status: "drifted" }, { id: 3, optional: false }), true);
+  } finally {
+    if (prev === undefined) delete process.env.DSH_PURGE_ALLOW_DRIFT;
+    else process.env.DSH_PURGE_ALLOW_DRIFT = prev;
+  }
 });
 
 /* ---------------------------------------------------------------------------
@@ -218,11 +230,13 @@ test("applyReplacementsToText: expect 命中数一致时正常替换", () => {
   assert.equal(r.text, "a X b");
 });
 
-test("applyReplacementsToText: expect=1 但一处都没命中也算不符（不许静默跳过）", () => {
+test("applyReplacementsToText: expect 只约束要改几处，不把 0 命中当失配", () => {
+  // expect 的职责是防止 split/join 把不相干的第二处一起改掉（over-replace）。
+  // 0 命中意味着这个文件里没有这段原文，没有可误伤的对象；"必须存在"由 strictFiles /
+  // drifted 判据负责，不该让多文件补丁在半打状态下一直报 hit_mismatch。
   const patch = { id: 9905, replacements: [{ pattern: "NEEDLE", replace: "X", expect: 1 }] };
   const r = applyReplacementsToText("nothing here", patch, "");
-  assert.ok(r.hitMismatch, "0 次命中同样是失配");
-  assert.equal(r.hitMismatch.actual, 0);
+  assert.equal(r.hitMismatch, undefined);
   assert.equal(r.changed, false);
 });
 
