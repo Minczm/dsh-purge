@@ -298,9 +298,8 @@
       name: '@deepseek-ai/dsh-tool-subagent-control'
       disabled: false
 
-    - id: tool-subagent-list-agents
-      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
-      disabled: false
+    # 0.2.2-rc.1 起 list_agents 已并入 @deepseek-ai/dsh-tool-subagent-control 主包，
+    # 不再导出 ./list-agents 子路径；单独挂这一行会让整份预设 broken、模式下拉被过滤掉。
 
     - id: tool-subagent
       name: '@deepseek-ai/dsh-tool-subagent'
