@@ -116,7 +116,12 @@ async function main() {
     }
     console.log("");
     console.log("回滚完成 / Revert done。重启 dsh 后恢复 / restart to restore.");
-    console.log("注: prompt-inject.md 保留（用户文件）/ prompt-inject.md kept (user file)");
+    const keptInject = report?.override?.kept;
+console.log(
+  keptInject
+    ? `注: prompt-inject.md 已保留为 ${keptInject}（用户文件不删除）/ prompt-inject.md kept as ${keptInject}`
+    : "注: prompt-inject.md 保留（用户文件）/ prompt-inject.md kept (user file)",
+);
   } else if (mode === "--uninstall") {
     const { uninstallPurge } = await import("../lib/uninstall.js");
     const result = await uninstallPurge();
