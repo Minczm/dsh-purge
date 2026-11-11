@@ -7369,11 +7369,28 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
           if (r.roles) setRoles(r.roles)
         }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
         /* 并发名额按"当前跑着的子智能体"算；host 侧读 subagents 注册表 */
+        refreshConcurrency()
+      }
+      /* [local] 只重取并发（不动角色提示词）：挂载、手动刷新、轮询共用这一条 */
+      function refreshConcurrency() {
         api({ op: 'agentsStatus' }).then((r) => {
           if (r && r.ok !== false) setConcurrency(r)
+          else if (r && r.error) setErr(r.error)
         }, () => {})
       }
       React.useEffect(load, [eng, refreshKey])
+      /* [local] 面板要跟着派活/收工自己动：以前只在挂载那一刻取一次快照，
+         子智能体跑起来之后数字不会变，看起来就像"并发一直是 0"。
+         这里加 5 秒静默重取 + 窗口重新聚焦时立刻重取。 */
+      React.useEffect(() => {
+        const timer = setInterval(refreshConcurrency, 5000)
+        const onFocus = () => refreshConcurrency()
+        if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('focus', onFocus)
+        return () => {
+          clearInterval(timer)
+          if (typeof window !== 'undefined' && window.removeEventListener) window.removeEventListener('focus', onFocus)
+        }
+      }, [eng])
 
       const used = concurrency ? concurrency.used : null
       const max = concurrency ? concurrency.max : 3
@@ -9254,3 +9271,4 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 		return module.exports;
 	}
 });
+// drift

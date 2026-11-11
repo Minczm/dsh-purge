@@ -37,7 +37,10 @@
     "embed-prompt": "node scripts/embed-default-prompt.mjs",
     "build:client": "node scripts/build-client.mjs",
     "postinstall": "node scripts/ensure-profile-bundle.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "verify:client": "node scripts/verify-client-build.mjs",
+    "verify:needles": "node scripts/verify-needles.mjs",
+    "verify": "npm run verify:client && npm run verify:needles && npm test"
   },
   "license": "Apache-2.0",
   "keywords": [
